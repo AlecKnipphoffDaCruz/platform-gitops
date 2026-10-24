@@ -1,34 +1,59 @@
 # platform-gitops
 
-Repo central do estudo de Kubernetes. Aqui fica o cluster, o Argo CD e os manifests de
-todos os apps. Os outros repos só guardam código:
+![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)
+![Argo CD](https://img.shields.io/badge/Argo%20CD-EF7B4D?logo=argo&logoColor=white)
+![k3d](https://img.shields.io/badge/k3d-FFC61C?logo=k3s&logoColor=black)
+![Kustomize](https://img.shields.io/badge/Kustomize-326CE5?logo=kubernetes&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 
-| Repo | O que tem |
-|------|-----------|
-| `platform-gitops` (este) | cluster local, Argo CD, manifests (Kustomize) |
-| `app-front-a` | código do front A + Dockerfile + CI |
-| `app-front-b` | código do front B + Dockerfile + CI |
+Laboratório pessoal para estudar e praticar **Kubernetes** e **GitOps**.
 
+A ideia é reproduzir em escala pequena como uma empresa organiza a entrega de aplicações:
+os apps ficam em repositórios separados, cada um com seu próprio CI, e este repositório é
+a **fonte da verdade** do que roda no cluster. O **Argo CD** observa este repo e mantém o
+cluster igual ao que está no Git.
+
+> 🧪 Projeto de estudo: tudo roda localmente em um cluster k3d. Os apps são simples de
+> propósito, porque o foco é a infraestrutura.
+
+## Repositórios
+
+| Repo | Papel |
+|------|-------|
+| **[platform-gitops](https://github.com/AlecKnipphoffDaCruz/platform-gitops)** (este) | Cluster local, instalação do Argo CD e manifests de todos os apps |
+| **[app-front-a](https://github.com/AlecKnipphoffDaCruz/app-front-a)** | Front em React + Vite, servido por nginx. Dockerfile e CI |
+| **[app-front-b](https://github.com/AlecKnipphoffDaCruz/app-front-b)** | Segundo front, com a mesma estrutura, para praticar múltiplos apps |
+
+## Como funciona
+
+```mermaid
+flowchart LR
+    dev([git push]) --> app[app-front-a / app-front-b]
+    app -- GitHub Actions --> build[build da imagem]
+    build --> ghcr[(GHCR)]
+    build -- commit da nova tag --> gitops[platform-gitops]
+    gitops -- observa --> argo[Argo CD]
+    argo -- sync --> k8s[(cluster k3d)]
+    ghcr -- pull da imagem --> k8s
 ```
-k8s-practice/          ← pasta local, não é repo
-├── platform-gitops/
-├── app-front-a/
-└── app-front-b/
-```
 
-## Como as coisas se conectam
+1. Um push na `main` de um app dispara o CI
+2. O CI builda a imagem e publica no GitHub Container Registry com a tag `sha-<commit>`
+3. O CI commita a nova tag no overlay do app aqui no `platform-gitops`
+4. O Argo CD detecta a mudança e aplica no cluster, sem nenhum `kubectl` manual
 
-```
-push no app-front-a ──► CI builda imagem ──► publica no GHCR
-                                         └─► commita a nova tag em apps/front-a/overlays/dev
-                                                          │
-Argo CD (no cluster) observa este repo ◄──────────────────┘
-        └─► aplica a mudança no cluster ──► http://front-a.localhost
-```
+O Argo usa o padrão **App of Apps**: `argocd/root-app.yaml` é uma Application que cria as
+outras Applications definidas em `argocd/apps/`. Para colocar um app novo no cluster, basta
+adicionar um arquivo nessa pasta.
 
-`argocd/root-app.yaml` é o **App of Apps**: uma Application que cria as outras
-Applications que estão em `argocd/apps/`. Pra adicionar um app novo no cluster, basta
-criar um arquivo nessa pasta.
+## Stack
+
+- **k3d**: cluster Kubernetes (k3s) em containers Docker, com 1 server e 2 agents
+- **Traefik**: Ingress Controller (já vem no k3s)
+- **Argo CD v3**: entrega contínua via GitOps, com `prune` e `selfHeal` ligados
+- **Kustomize**: `base` + `overlays` por ambiente
+- **GitHub Actions + GHCR**: build e publicação das imagens
 
 ## Estrutura
 
@@ -41,88 +66,40 @@ argocd/
   apps/                 # uma Application por app/ambiente
 apps/
   front-a/
-    base/               # Deployment, Service, Ingress (comum a todo ambiente)
-    overlays/dev/       # o que muda no dev: namespace, réplicas, tag da imagem
-  front-b/ ...
+    base/               # Deployment, Service, Ingress
+    overlays/dev/       # namespace, réplicas e tag da imagem do ambiente dev
+  front-b/
 ```
 
-## Pré-requisitos
+## Rodando localmente
+
+Pré-requisitos: Docker, `kubectl`, [`k3d`](https://k3d.io) e [`gh`](https://cli.github.com).
 
 ```bash
-brew install k3d          # kubectl, docker e gh você já tem
+make up                # cria o cluster e instala o Argo CD
+make argocd-password   # senha do usuário admin
+make root-app          # liga o App of Apps
 ```
 
-O Docker Desktop precisa estar aberto.
+| URL | O que é |
+|-----|---------|
+| http://argocd.localhost | UI do Argo CD |
+| http://front-a.localhost | Front A |
+| http://front-b.localhost | Front B |
 
-## Comandos
+Outros comandos: `make help`, `make status`, `make clone-apps`, `make build-apps`, `make down`.
 
-```bash
-make help              # lista tudo
-make up                # cria o cluster + instala o Argo CD
-make argocd-password   # senha do admin → http://argocd.localhost
-make clone-apps        # clona os repos dos apps ao lado deste
-make build-apps        # builda as imagens e importa no cluster (sem registry)
-make root-app          # liga o App of Apps (precisa do repo no GitHub)
-make status
-make down              # apaga tudo
-```
+## Roadmap
 
----
-
-## Roteiro de estudo
-
-Faça em ordem. Cada fase tem exercícios, então quebre as coisas de propósito.
-
-### Fase 1: Kubernetes na mão (sem Argo)
-```bash
-make cluster
-make build-apps
-kubectl apply -k apps/front-a/overlays/dev
-kubectl get all -n front-a-dev
-open http://front-a.localhost
-```
-- [ ] `kubectl kustomize apps/front-a/overlays/dev`: veja o YAML final gerado
-- [ ] Delete um pod e veja o Deployment recriar (`kubectl get pods -w`)
-- [ ] `kubectl scale`, `kubectl logs`, `kubectl describe`, `kubectl exec`
-- [ ] `kubectl port-forward svc/front-a 9000:80 -n front-a-dev`
-- [ ] Quebre a readinessProbe (path errado) e veja o que acontece com o Service
-
-### Fase 2: Recursos essenciais
-- [ ] ConfigMap com uma mensagem que o front exibe
-- [ ] Secret (e entenda por que base64 não é criptografia)
-- [ ] HPA (precisa de metrics-server; o k3s já tem)
-- [ ] Rolling update: mude a tag, veja `kubectl rollout status` e `rollout undo`
-- [ ] PodDisruptionBudget e topologySpreadConstraints entre os 2 workers
-
-### Fase 3: Ambientes
-- [ ] Crie `overlays/prod` (namespace, 3 réplicas, host `front-a-prod.localhost`)
-- [ ] Bônus: reescreva um dos apps como Helm chart e compare com Kustomize
-
-### Fase 4: Argo CD
-```bash
-make argocd            # se ainda não instalou
-# suba este repo pro GitHub (público) e:
-make root-app
-```
-- [ ] Veja as Applications na UI
-- [ ] Mude réplicas no Git, faça push e veja o Argo sincronizar
-- [ ] Faça um `kubectl scale` manual e veja o selfHeal desfazer
-- [ ] Apague um arquivo da base e veja o prune
-- [ ] Crie `argocd/apps/front-a-prod.yaml` apontando para o overlay de prod
-
-### Fase 5: CI fechando o ciclo GitOps
-1. Suba `app-front-a` e `app-front-b` pro GitHub
-2. Crie um token (fine-grained PAT) com **Contents: read and write** só no repo `platform-gitops`
-3. Em cada repo de app, adicione o secret `GITOPS_TOKEN` com esse token
-4. Depois do primeiro build, deixe o pacote **público** no GHCR
-   (GitHub → Packages → app-front-a → Package settings → Change visibility).
-   Assim o cluster consegue puxar a imagem sem credencial
-- [ ] Mude um texto no front, faça push e veja a versão nova em `front-a.localhost`
-- [ ] Bônus: deixe o pacote privado e configure um `imagePullSecret`
-
-### Fase 6: Extras
-- [ ] Prometheus + Grafana (kube-prometheus-stack via Argo)
-- [ ] Sealed Secrets ou External Secrets
-- [ ] NetworkPolicy: front-a não pode falar com front-b
-- [ ] Argo Rollouts: deploy canary
-- [ ] Argo CD gerenciando ele mesmo (`bootstrap/argocd` como Application)
+- [x] Cluster local com k3d e Ingress
+- [x] Deploy com Kustomize (base + overlay dev)
+- [x] Argo CD com App of Apps, sync automático, prune e self-heal
+- [x] Repositórios separados para os apps
+- [ ] CI fechando o ciclo GitOps (push no app → deploy automático)
+- [ ] ConfigMap, Secret, HPA e PodDisruptionBudget
+- [ ] Ambiente `prod` (novo overlay + Application)
+- [ ] Observabilidade com Prometheus + Grafana
+- [ ] Gestão de segredos com Sealed Secrets ou External Secrets
+- [ ] NetworkPolicy isolando os apps
+- [ ] Deploy canary com Argo Rollouts
+- [ ] Argo CD gerenciando a própria instalação
