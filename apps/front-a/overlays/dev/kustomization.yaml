@@ -10,4 +10,4 @@ replicas:
 images:
   - name: app-front-a
     newName: ghcr.io/alecknipphoffdacruz/app-front-a
-    newTag: sha-323cd00 # o CI do repo app-front-a atualiza essa linha
+    newTag: sha-d1bd2d9 # o CI do repo app-front-a atualiza essa linha
