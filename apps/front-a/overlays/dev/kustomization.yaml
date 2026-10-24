@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: front-a-dev
+resources:
+  - namespace.yaml
+  - ../../base
+replicas:
+  - name: front-a
+    count: 2
+images:
+  - name: app-front-a
+    newName: ghcr.io/alecknipphoffdacruz/app-front-a
+    newTag: dev   # o CI do repo app-front-a atualiza essa linha

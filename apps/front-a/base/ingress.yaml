@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: front-a
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: front-a.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: front-a
+                port:
+                  name: http

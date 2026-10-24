@@ -1,0 +1,13 @@
+# Cluster local: 1 control-plane + 2 workers, rodando em containers Docker.
+# O k3s já vem com o Traefik como Ingress Controller.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: k8s-practice
+servers: 1
+agents: 2
+ports:
+  - port: 80:80        # http://<algo>.localhost
+    nodeFilters: [loadbalancer]
+  - port: 443:443
+    nodeFilters: [loadbalancer]
