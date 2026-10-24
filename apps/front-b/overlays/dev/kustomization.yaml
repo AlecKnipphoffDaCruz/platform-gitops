@@ -10,4 +10,4 @@ replicas:
 images:
   - name: app-front-b
     newName: ghcr.io/alecknipphoffdacruz/app-front-b
-    newTag: dev   # o CI do repo app-front-b atualiza essa linha
+    newTag: sha-842e1ec # o CI do repo app-front-b atualiza essa linha
